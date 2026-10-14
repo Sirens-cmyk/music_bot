@@ -3,16 +3,24 @@ import * as cheerio from 'cheerio';
 export default async function handler(req, res) {
     const urlPath = req.url.replace(/^\/api\/?/, '').replace(/^\//, '');
     
-    // اگر درخواست جستجو بود
     if (urlPath.startsWith('search')) {
         const urlParams = new URLSearchParams(req.url.split('?')[1]);
         const query = urlParams.get('q') || '';
         if (!query) return res.status(400).json({ error: 'Query is required' });
         
         try {
-            const searchRes = await fetch(`https://nex1music.ir/?s=${encodeURIComponent(query)}`, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+            const targetUrl = `https://nex1music.ir/?s=${encodeURIComponent(query)}`;
+            const searchRes = await fetch(targetUrl, {
+                headers: { 
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Referer': 'https://nex1music.ir/'
+                }
             });
+            
+            if (!searchRes.ok) {
+                return res.status(502).json({ error: `سایت هدف دسترسی را بست (کد: ${searchRes.status})` });
+            }
+            
             const html = await searchRes.text();
             const $ = cheerio.load(html);
             
@@ -21,22 +29,30 @@ export default async function handler(req, res) {
                 const href = $(el).attr('href');
                 if (href && href.includes('nex1music.ir/') && !href.includes('tag') && !href.includes('category') && !href.includes('page') && href !== 'https://nex1music.ir/') {
                     songPageUrl = href;
-                    return false; // توقف در اولین نتیجه
+                    return false;
                 }
             });
             
-            if (!songPageUrl) return res.status(404).json({ error: 'Song not found' });
+            if (!songPageUrl) {
+                return res.status(404).json({ error: 'هیچ لینکی در صفحه جستجو پیدا نشد' });
+            }
             
             const songRes = await fetch(songPageUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                headers: { 
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Referer': 'https://nex1music.ir/'
+                }
             });
+            
+            if (!songRes.ok) {
+                return res.status(502).json({ error: `خطا در باز کردن صفحه آهنگ (کد: ${songRes.status})` });
+            }
+            
             const songHtml = await songRes.text();
             const $song = cheerio.load(songHtml);
             
-            // استخراج نام آهنگ
             const title = $song('h1').first().text().trim() || 'موزیک درخواستی';
             
-            // استخراج لینک مستقیم فایل mp3
             let mp3Url = null;
             $song('a').each((i, el) => {
                 const href = $song(el).attr('href');
@@ -46,7 +62,9 @@ export default async function handler(req, res) {
                 }
             });
             
-            if (!mp3Url) return res.status(404).json({ error: 'MP3 link not found' });
+            if (!mp3Url) {
+                return res.status(404).json({ error: 'لینک دانلود مستقیم MP3 پیدا نشد' });
+            }
             
             return res.status(200).json({ title, url: mp3Url });
         } catch (err) {
@@ -54,7 +72,6 @@ export default async function handler(req, res) {
         }
     }
     
-    // پروکسی تلگرام
     if (!urlPath || urlPath === 'api' || urlPath === '') {
         return res.status(200).json({ status: "Telegram Proxy is active!" });
     }
