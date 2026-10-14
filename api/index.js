@@ -1,3 +1,5 @@
+import * as cheerio from 'cheerio';
+
 export default async function handler(req, res) {
     const urlPath = req.url.replace(/^\/api\/?/, '').replace(/^\//, '');
     
@@ -9,29 +11,43 @@ export default async function handler(req, res) {
         
         try {
             const searchRes = await fetch(`https://nex1music.ir/?s=${encodeURIComponent(query)}`, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
             });
             const html = await searchRes.text();
+            const $ = cheerio.load(html);
             
-            // پیدا کردن لینک صفحه اول آهنگ
-            const matchLink = html.match(/href="(https:\/\/nex1music\.ir\/[^\/]+\/)"/);
-            if (!matchLink) return res.status(404).json({ error: 'Song not found' });
+            let songPageUrl = null;
+            $('a').each((i, el) => {
+                const href = $(el).attr('href');
+                if (href && href.includes('nex1music.ir/') && !href.includes('tag') && !href.includes('category') && !href.includes('page') && href !== 'https://nex1music.ir/') {
+                    songPageUrl = href;
+                    return false; // توقف در اولین نتیجه
+                }
+            });
             
-            const songPageUrl = matchLink[1];
+            if (!songPageUrl) return res.status(404).json({ error: 'Song not found' });
+            
             const songRes = await fetch(songPageUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
             });
             const songHtml = await songRes.text();
+            const $song = cheerio.load(songHtml);
             
             // استخراج نام آهنگ
-            const titleMatch = songHtml.match(/<h1>(.*?)<\/h1>/);
-            const title = titleMatch ? titleMatch[1].replace(/<[^>]*>?/gm, '').trim() : 'موزیک درخواستی';
+            const title = $song('h1').first().text().trim() || 'موزیک درخواستی';
             
-            // استخراج لینک مستقیم mp3
-            const mp3Match = songHtml.match(/href="(https:\/\/[^"]+\.mp3)"/);
-            if (!mp3Match) return res.status(404).json({ error: 'MP3 link not found' });
+            // استخراج لینک مستقیم فایل mp3
+            let mp3Url = null;
+            $song('a').each((i, el) => {
+                const href = $song(el).attr('href');
+                if (href && href.endsWith('.mp3')) {
+                    mp3Url = href;
+                    return false;
+                }
+            });
             
-            const mp3Url = mp3Match[1];
+            if (!mp3Url) return res.status(404).json({ error: 'MP3 link not found' });
+            
             return res.status(200).json({ title, url: mp3Url });
         } catch (err) {
             return res.status(500).json({ error: err.message });
