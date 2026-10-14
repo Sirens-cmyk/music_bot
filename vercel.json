@@ -1,5 +1,7 @@
 {
   "rewrites": [
+    { "source": "/deezer/(.*)", "destination": "https://api.deezer.com/$1" },
+    { "source": "/genius/(.*)", "destination": "https://api.genius.com/$1" },
     { "source": "/(.*)", "destination": "https://api.telegram.org/$1" }
   ]
 }
