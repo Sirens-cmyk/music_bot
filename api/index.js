@@ -1,94 +1,103 @@
 import * as cheerio from 'cheerio';
 
+const BOT_TOKEN = '8270767649:AAH_Mh-QQJ2acDfWZWDlaefIK3dCJ2gyk9E'; // توکن رباتت رو اینجا وارد کن
+
 export default async function handler(req, res) {
-    const urlPath = req.url.replace(/^\/api\/?/, '').replace(/^\//, '');
-    
-    if (urlPath.startsWith('search')) {
-        const urlParams = new URLSearchParams(req.url.split('?')[1]);
-        const query = urlParams.get('q') || '';
-        if (!query) return res.status(400).json({ error: 'Query is required' });
-        
-        try {
-            const targetUrl = `https://upmusics.com/?s=${encodeURIComponent(query)}`;
-            const searchRes = await fetch(targetUrl, {
-                headers: { 
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Accept-Language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7'
-                }
-            });
-            
-            if (!searchRes.ok) {
-                return res.status(502).json({ error: `خطا در ارتباط با سایت (کد: ${searchRes.status})` });
-            }
-            
-            const html = await searchRes.text();
-            const $ = cheerio.load(html);
-            
-            let songPageUrl = null;
-            $('a').each((i, el) => {
-                const href = $(el).attr('href');
-                if (href && href.includes('upmusics.com/') && !href.includes('tag') && !href.includes('category') && !href.includes('page') && !href.includes('author') && !href.includes('s=')) {
-                    songPageUrl = href;
-                    return false;
-                }
-            });
-            
-            if (!songPageUrl) {
-                return res.status(404).json({ error: 'آهنگی با این مشخصات پیدا نشد' });
-            }
-            
-            const songRes = await fetch(songPageUrl, {
-                headers: { 
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Referer': 'https://upmusics.com/'
-                }
-            });
-            
-            if (!songRes.ok) {
-                return res.status(502).json({ error: `خطا در باز کردن صفحه آهنگ` });
-            }
-            
-            const songHtml = await songRes.text();
-            const $song = cheerio.load(songHtml);
-            
-            const title = $song('h1').first().text().trim() \vert{}\vert{}$song('title').text().trim() || 'موزیک درخواستی';
-            
-            let mp3Url = null;
-            $song('a').each((i, el) => {
-                const href = $song(el).attr('href');
-                if (href && href.endsWith('.mp3')) {
-                    mp3Url = href;
-                    return false;
-                }
-            });
-            
-            if (!mp3Url) {
-                return res.status(404).json({ error: 'لینک دانلود مستقیم MP3 پیدا نشد' });
-            }
-            
-            return res.status(200).json({ title, url: mp3Url });
-        } catch (err) {
-            return res.status(500).json({ error: err.message });
-        }
-    }
-    
-    if (!urlPath || urlPath === 'api' || urlPath === '') {
-        return res.status(200).json({ status: "Telegram Proxy is active!" });
+    if (req.method !== 'POST') {
+        return res.status(200).json({ status: "Music Bot Webhook is active!" });
     }
 
-    const telegramUrl = `https://api.telegram.org/${urlPath}`;
     try {
-        const options = {
-            method: req.method,
-            headers: { 'Content-Type': 'application/json' },
-        };
-        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-            options.body = JSON.stringify(req.body);
+        const update = req.body;
+        if (!update || !update.message || !update.message.text) {
+            return res.status(200).json({ ok: true });
         }
-        const apiRes = await fetch(telegramUrl, options);
-        const data = await apiRes.json();
-        return res.status(apiRes.status).json(data);
+
+        const chatId = update.message.chat.id;
+        const text = update.message.text.trim();
+        const firstName = update.message.from.first_name || 'دوست';
+
+        const sendMessage = async (msg) => {
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: msg })
+            });
+        };
+
+        if (text === '/start') {
+            await sendMessage(`سلام ${firstName} جان! 🎵\nاسم آهنگ یا خواننده رو بفرست تا از سرور ابری برات پیدا کنم و بفرستم:`);
+            return res.status(200).json({ ok: true });
+        }
+
+        await sendMessage("🔍 در حال جستجوی ابری موزیک...");
+
+        const targetUrl = `https://upmusics.com/?s=${encodeURIComponent(text)}`;
+        const searchRes = await fetch(targetUrl, {
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept-Language': 'fa-IR,fa;q=0.9'
+            }
+        });
+
+        if (!searchRes.ok) {
+            await sendMessage("❌ خطا در ارتباط با سایت موزیک.");
+            return res.status(200).json({ ok: true });
+        }
+
+        const html = await searchRes.text();
+        const $ = cheerio.load(html);
+
+        let songPageUrl = null;
+        $('a').each((i, el) => {
+            const href = $(el).attr('href');
+            if (href && href.includes('upmusics.com/') && !href.includes('tag') && !href.includes('category') && !href.includes('page') && !href.includes('author') && !href.includes('s=')) {
+                songPageUrl = href;
+                return false;
+            }
+        });
+
+        if (!songPageUrl) {
+            await sendMessage("❌ متأسفانه آهنگی با این مشخصات پیدا نشد.");
+            return res.status(200).json({ ok: true });
+        }
+
+        const songRes = await fetch(songPageUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        const songHtml = await songRes.text();
+        const $song = cheerio.load(songHtml);
+
+        const title = $song('h1').first().text().trim() \vert{}\vert{}$song('title').text().trim() || 'موزیک درخواستی';
+
+        let mp3Url = null;
+        $song('a').each((i, el) => {
+            const href = $song(el).attr('href');
+            if (href && href.endsWith('.mp3')) {
+                mp3Url = href;
+                return false;
+            }
+        });
+
+        if (!mp3Url) {
+            await sendMessage("❌ لینک دانلود مستقیم MP3 پیدا نشد.");
+            return res.status(200).json({ ok: true });
+        }
+
+        // ارسال فایل صوتی به کاربر
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                audio: mp3Url,
+                caption: `🎧 ${title}`
+            })
+        });
+
+        return res.status(200).json({ ok: true });
     } catch (err) {
-        return res.status(500).json({ error: err.message });
+        console.error(err);
+        return res.status(200).json({ ok: true });
     }
 }
