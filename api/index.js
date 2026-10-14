@@ -18,7 +18,7 @@ export default async function handler(req, res) {
             });
             
             if (!searchRes.ok) {
-                return res.status(502).json({ error: `سایت هدف دسترسی را بست (کد: ${searchRes.status})` });
+                return res.status(502).json({ error: `خطا در ارتباط با سایت (کد: ${searchRes.status})` });
             }
             
             const html = await searchRes.text();
@@ -27,9 +27,12 @@ export default async function handler(req, res) {
             let songPageUrl = null;
             $('a').each((i, el) => {
                 const href = $(el).attr('href');
-                if (href && href.includes('nex1music.ir/') && !href.includes('tag') && !href.includes('category') && !href.includes('page') && href !== 'https://nex1music.ir/') {
-                    songPageUrl = href;
-                    return false;
+                if (href && !href.includes('tag') && !href.includes('category') && !href.includes('page') && !href.includes('author') && !href.includes('s=')) {
+                    if (href.includes('nex1music.ir/') || href.startsWith('/')) {
+                        // اصلاح لینک‌های نسبی و کامل
+                        songPageUrl = href.startsWith('http') ? href : `https://nex1music.ir${href}`;
+                        return false; // پیدا شد، خروج از حلقه
+                    }
                 }
             });
             
@@ -45,7 +48,7 @@ export default async function handler(req, res) {
             });
             
             if (!songRes.ok) {
-                return res.status(502).json({ error: `خطا در باز کردن صفحه آهنگ (کد: ${songRes.status})` });
+                return res.status(502).json({ error: `خطا در باز کردن صفحه آهنگ` });
             }
             
             const songHtml = await songRes.text();
