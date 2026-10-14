@@ -1,8 +1,8 @@
-import * as cheerio from 'cheerio';
+const cheerio = require('cheerio');
 
-const BOT_TOKEN = '8270767649:AAH_Mh-QQJ2acDfWZWDlaefIK3dCJ2gyk9E'; // توکن رباتت رو اینجا وارد کن
+const BOT_TOKEN = '8270767649:AAH_Mh-QQJ2acDfWZWDlaefIK3dCJ2gyk9E';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     if (req.method !== 'POST') {
         return res.status(200).json({ status: "Music Bot Webhook is active!" });
     }
@@ -100,4 +100,4 @@ export default async function handler(req, res) {
         console.error(err);
         return res.status(200).json({ ok: true });
     }
-}
+};
