@@ -1,18 +1,12 @@
 export default async function handler(req, res) {
-    const { path } = req.query;
-    if (!path) {
+    // استخراج مسیر درخواست
+    const urlPath = req.url.replace(/^\/api\/?/, '').replace(/^\//, '');
+    
+    if (!urlPath || urlPath === 'api' || urlPath === '') {
         return res.status(200).json({ status: "Telegram Proxy is active!" });
     }
 
-    // بازسازی آدرس اصلی تلگرام
-    const telegramUrl = `https://api.telegram.org/${path.join('/')}`;
-    
-    const url = new URL(telegramUrl);
-    for (const [key, val] of Object.entries(req.query)) {
-        if (key !== 'path') {
-            url.searchParams.append(key, val);
-        }
-    }
+    const telegramUrl = `https://api.telegram.org/${urlPath}`;
 
     try {
         const options = {
@@ -24,7 +18,7 @@ export default async function handler(req, res) {
             options.body = JSON.stringify(req.body);
         }
 
-        const apiRes = await fetch(url.toString(), options);
+        const apiRes = await fetch(telegramUrl, options);
         const data = await apiRes.json();
         
         return res.status(apiRes.status).json(data);
